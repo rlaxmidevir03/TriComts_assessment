@@ -1,6 +1,9 @@
 // All SQL for requests lives here. The routes call these functions; the rules live in workflow.js.
 // The database uses snake_case columns; everything returned from here is camelCase.
 import { transaction } from './db.js'
+import { WorkflowError } from './workflow.js'
+
+export const STALE_MESSAGE = 'This request was changed since you opened it. Please reload it and try again.'
 
 // ---------- Reading ----------
 
@@ -71,6 +74,12 @@ export function listRequests(db, { view, user, q, status, departmentId }) {
     // Waiting on me, or on someone I'm covering for, but never my own request.
     where.push(`r.status = 'pending' AND (a.id = ? OR a.delegate_id = ?) AND r.requester_id <> ?`)
     params.push(user.id, user.id, user.id)
+  } else if (view === 'reviewed') {
+    // Requests I approved, rejected or sent back, or that my backup decided on my behalf (G1).
+    where.push(`r.id IN (SELECT request_id FROM request_history
+                         WHERE action IN ('approved', 'rejected', 'sent_back')
+                           AND (actor_id = ? OR on_behalf_of_id = ?))`)
+    params.push(user.id, user.id)
   } else {
     if (q) {
       where.push('(r.vendor LIKE ? OR r.justification LIKE ? OR u.name LIKE ?)')
@@ -90,9 +99,11 @@ export function listRequests(db, { view, user, q, status, departmentId }) {
   return db.prepare(sql).all(...params).map(toRequest)
 }
 
-// Has this user ever acted on the request? (Lets past approvers keep seeing it.)
+// Has this user ever acted on the request, or had a backup act for them? (Lets past approvers keep seeing it.)
 export function hasActedOn(db, userId, requestId) {
-  return !!db.prepare('SELECT 1 FROM request_history WHERE request_id = ? AND actor_id = ?').get(requestId, userId)
+  return !!db
+    .prepare('SELECT 1 FROM request_history WHERE request_id = ? AND (actor_id = ? OR on_behalf_of_id = ?)')
+    .get(requestId, userId, userId)
 }
 
 export function listDepartments(db) {
@@ -125,7 +136,10 @@ export function createRequest(db, requesterId, result) {
   })
 }
 
-export function applyResult(db, requestId, result) {
+// expectedVersion is the version the user was looking at. The UPDATE only matches if the
+// request still has that version, so a change based on an outdated screen can never be saved,
+// even if two clicks arrive at the same moment (optimistic locking).
+export function applyResult(db, requestId, result, expectedVersion) {
   transaction(db, () => {
     const columns = { status: 'status', currentStep: 'current_step', vendor: 'vendor', category: 'category', justification: 'justification', amountCents: 'amount_cents' }
     const sets = ['version = version + 1', 'updated_at = ?', 'waiting_since = ?']
@@ -135,7 +149,10 @@ export function applyResult(db, requestId, result) {
       sets.push(`${columns[key]} = ?`)
       params.push(value)
     }
-    db.prepare(`UPDATE requests SET ${sets.join(', ')} WHERE id = ?`).run(...params, requestId)
+    const { changes } = db
+      .prepare(`UPDATE requests SET ${sets.join(', ')} WHERE id = ? AND version = ?`)
+      .run(...params, requestId, expectedVersion)
+    if (changes === 0) throw new WorkflowError('conflict', STALE_MESSAGE) // rolls back: nothing is saved
 
     if (result.steps) {
       // The route is working state, so it can be replaced. The history table keeps what happened.

@@ -21,7 +21,13 @@ beforeEach(() => {
 afterEach(() => server.close())
 
 // Calls the API as a given demo user. Returns { status, body }.
+// Actions on an existing request need the version the user is looking at. Like the real UI,
+// this helper sends the current version automatically, unless the test sets "version" itself.
 async function call(userId, method, path, body) {
+  const requestId = path.match(/^\/requests\/(\d+)/)?.[1]
+  if (method !== 'GET' && requestId && body && !('version' in body)) {
+    body = { ...body, version: versionOf(Number(requestId)) }
+  }
   const headers = { 'Content-Type': 'application/json' }
   if (userId) headers['X-User-Id'] = String(userId)
   const res = await fetch(baseUrl + path, { method, headers, body: body && JSON.stringify(body) })
@@ -43,6 +49,7 @@ async function submitAs(userId, amountCents) {
 
 const historyCount = (id) => db.prepare('SELECT COUNT(*) AS n FROM request_history WHERE request_id = ?').get(id).n
 const statusOf = (id) => db.prepare('SELECT status FROM requests WHERE id = ?').get(id).status
+const versionOf = (id) => db.prepare('SELECT version FROM requests WHERE id = ?').get(id)?.version
 
 describe('sign-in', () => {
   test('no user header → 401', async () => {
@@ -198,6 +205,63 @@ describe('input and state errors', () => {
   })
 })
 
+describe('outdated screens (version check)', () => {
+  test('the $900 → $9,000 case: an approval based on the old version is refused', async () => {
+    const id = await submitAs(ALEX, 90000)
+    const morganSaw = versionOf(id) // Morgan opens the $900 request...
+
+    await call(ALEX, 'PUT', `/requests/${id}`, { amountCents: 900000 }) // ...Alex raises it to $9,000...
+
+    const res = await call(MORGAN, 'POST', `/requests/${id}/approve`, { version: morganSaw }) // ...Morgan clicks Approve
+    assert.equal(res.status, 409)
+    assert.match(res.body.error, /changed since you opened it/)
+    assert.equal(historyCount(id), 2) // submitted + edited, but NO approval
+    assert.equal((await call(MORGAN, 'GET', `/requests/${id}`)).body.currentStep, 1)
+  })
+
+  test('after reloading, the approver can act on the new version', async () => {
+    const id = await submitAs(ALEX, 90000)
+    await call(ALEX, 'PUT', `/requests/${id}`, { amountCents: 900000 })
+    const fresh = (await call(MORGAN, 'GET', `/requests/${id}`)).body
+    assert.equal((await call(MORGAN, 'POST', `/requests/${id}/approve`, { version: fresh.version })).status, 200)
+  })
+
+  test('two people acting on the same version: the second one is refused', async () => {
+    const id = await submitAs(ALEX)
+    db.prepare('UPDATE users SET delegate_id = ? WHERE id = ?').run(JORDAN, MORGAN) // Jordan covers Morgan
+    const v = versionOf(id)
+    assert.equal((await call(MORGAN, 'POST', `/requests/${id}/send-back`, { version: v, comment: 'Need quote' })).status, 200)
+    assert.equal((await call(JORDAN, 'POST', `/requests/${id}/approve`, { version: v })).status, 409)
+    assert.equal(statusOf(id), 'sent_back')
+  })
+
+  test('the requester editing from an outdated screen is refused too', async () => {
+    const id = await submitAs(ALEX)
+    const v = versionOf(id)
+    await call(ALEX, 'PUT', `/requests/${id}`, { vendor: 'First edit' })
+    assert.equal((await call(ALEX, 'PUT', `/requests/${id}`, { vendor: 'Second edit', version: v })).status, 409)
+  })
+
+  test('an action without a version → 400', async () => {
+    const id = await submitAs(ALEX)
+    const res = await call(MORGAN, 'POST', `/requests/${id}/approve`, { version: undefined })
+    assert.equal(res.status, 400)
+    assert.match(res.body.error, /version/)
+  })
+
+  test('the database layer refuses a stale save and rolls everything back', async () => {
+    const { applyResult } = await import('../src/store.js')
+    const id = await submitAs(ALEX)
+    const fakeResult = {
+      updates: { status: 'approved', currentStep: null },
+      history: { action: 'approved', actorId: MORGAN, onBehalfOfId: null, comment: null, changes: null },
+    }
+    assert.throws(() => applyResult(db, id, fakeResult, versionOf(id) - 1), /changed since you opened it/)
+    assert.equal(statusOf(id), 'pending')
+    assert.equal(historyCount(id), 1) // the history insert was rolled back with the update
+  })
+})
+
 describe('vacation backup (Marcus)', () => {
   test('full flow: Morgan picks Jordan, Jordan approves on Morgan’s behalf, Morgan comes back', async () => {
     const id = await submitAs(ALEX) // waiting on Morgan
@@ -254,6 +318,38 @@ describe('lists', () => {
     const inbox = (await call(JORDAN, 'GET', '/requests?view=inbox')).body
     assert.deepEqual(inbox.map((r) => r.id), [id])
     assert.equal(inbox[0].coveringDelegateName, 'Jordan Blake')
+  })
+
+  test('reviewed shows requests I approved, rejected or sent back, and keeps them after they move on', async () => {
+    const approved = await submitAs(ALEX, 500000) // Morgan → Daniel
+    const rejected = await submitAs(ALEX)
+    const sentBack = await submitAs(ALEX)
+    const untouched = await submitAs(ALEX)
+    await call(MORGAN, 'POST', `/requests/${approved}/approve`, {}) // now waiting on Daniel
+    await call(MORGAN, 'POST', `/requests/${rejected}/reject`, { comment: 'No' })
+    await call(MORGAN, 'POST', `/requests/${sentBack}/send-back`, { comment: 'Quote?' })
+
+    const reviewed = (await call(MORGAN, 'GET', '/requests?view=reviewed')).body.map((r) => r.id)
+    assert.deepEqual(reviewed.sort(), [approved, rejected, sentBack].sort())
+    assert.ok(!reviewed.includes(untouched))
+    assert.deepEqual((await call(DANIEL, 'GET', '/requests?view=reviewed')).body, [])
+  })
+
+  test('reviewed includes decisions a backup made on my behalf (for both of us)', async () => {
+    const id = await submitAs(ALEX)
+    db.prepare('UPDATE users SET delegate_id = ? WHERE id = ?').run(JORDAN, MORGAN)
+    await call(JORDAN, 'POST', `/requests/${id}/approve`, {})
+    db.prepare('UPDATE users SET delegate_id = NULL WHERE id = ?').run(MORGAN) // Morgan is back
+
+    assert.deepEqual((await call(JORDAN, 'GET', '/requests?view=reviewed')).body.map((r) => r.id), [id])
+    assert.deepEqual((await call(MORGAN, 'GET', '/requests?view=reviewed')).body.map((r) => r.id), [id])
+    assert.equal((await call(MORGAN, 'GET', `/requests/${id}`)).status, 200) // and can open it
+  })
+
+  test('submitting or editing does not count as reviewing', async () => {
+    const id = await submitAs(ALEX)
+    await call(ALEX, 'PUT', `/requests/${id}`, { vendor: 'Changed' })
+    assert.deepEqual((await call(ALEX, 'GET', '/requests?view=reviewed')).body, [])
   })
 
   test('mine shows only my requests, with status and current approver', async () => {

@@ -62,7 +62,10 @@ export function seedSampleRequests(db) {
 
   const newRequest = (requester, vendor, category, amountCents, justification) =>
     createRequest(db, requester.id, submit(requester, { vendor, category, amountCents, justification }, org))
-  const then = (id, rule) => applyResult(db, id, rule(getRequest(db, id)))
+  const then = (id, rule) => {
+    const request = getRequest(db, id)
+    applyResult(db, id, rule(request), request.version)
+  }
 
   // 1. Small rush order, waiting on the manager.
   newRequest(alex, 'QuickShip Logistics', 'Rush order', 45000, 'Overnight freight for a customer order that missed the weekly truck.')

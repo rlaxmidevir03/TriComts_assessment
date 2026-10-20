@@ -180,6 +180,7 @@ Errors return `{ "error": "message" }` with **400** invalid input · **401** no 
 | `GET /api/departments` | signed in | For the filter dropdown |
 | `GET /api/requests?view=mine` | signed in | My requests (US-9) |
 | `GET /api/requests?view=inbox` | approvers | Waiting on me or someone I cover (US-10) |
+| `GET /api/requests?view=reviewed` | approvers | Requests I approved, rejected or sent back, or my backup did for me (G1) |
 | `GET /api/requests?view=all&q=&status=&department=` | finance, vp_finance | Company-wide, searchable and filterable (US-12) |
 | `GET /api/requests/:id` | requester, anyone in its route, finance, vp_finance | Details + route + full history |
 | `POST /api/requests` | not finance | Submit (US-1) |

@@ -15,6 +15,10 @@ export async function api(path, { method = 'GET', body } = {}) {
   const res = await fetch(`/api${path}`, { method, headers, body: body && JSON.stringify(body) })
   const data = await res.json().catch(() => ({}))
   // The server explains every refusal (400/403/409) in data.error; show that to the user.
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
+  if (!res.ok) {
+    const err = new Error(data.error || `Request failed (${res.status})`)
+    err.status = res.status // 409 = the request changed since it was loaded
+    throw err
+  }
   return data
 }

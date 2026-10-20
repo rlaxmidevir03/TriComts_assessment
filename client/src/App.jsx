@@ -9,7 +9,7 @@ import BackupPanel from './components/BackupPanel.jsx'
 
 const APPROVER_ROLES = ['manager', 'director', 'vp_finance']
 const SEE_EVERYTHING = ['finance', 'vp_finance'] // same rule the server enforces
-const LIST_PAGES = ['mine', 'inbox', 'all']
+const LIST_PAGES = ['mine', 'inbox', 'reviewed', 'all']
 
 // The page each role lands on after switching user.
 function homePage(user) {
@@ -31,7 +31,7 @@ export default function App() {
   const [users, setUsers] = useState([])
   const [currentUser, setUser] = useState(null)
   // Which screen is showing. Kept as simple state instead of adding a router library.
-  // { name: 'mine' | 'inbox' | 'all' | 'detail' | 'form', id?, request?, from? }
+  // { name: 'mine' | 'inbox' | 'reviewed' | 'all' | 'detail' | 'form', id?, request?, from? }
   const [page, setPage] = useState({ name: 'mine' })
   const [allFilters, setAllFilters] = useState(NO_FILTERS) // "All requests" search + filters
   const [inboxVersion, setInboxVersion] = useState(0) // bumped to reload the inbox
@@ -80,9 +80,14 @@ export default function App() {
             </Tab>
           )}
           {isApprover && (
-            <Tab page={page} name="inbox" setPage={setPage}>
-              Awaiting my approval
-            </Tab>
+            <>
+              <Tab page={page} name="inbox" setPage={setPage}>
+                Awaiting my approval
+              </Tab>
+              <Tab page={page} name="reviewed" setPage={setPage}>
+                Reviewed by me
+              </Tab>
+            </>
           )}
           {canSeeAll && (
             <Tab page={page} name="all" setPage={setPage}>
@@ -115,6 +120,15 @@ export default function App() {
               emptyText="Nothing is waiting on you."
             />
           </>
+        )}
+        {page.name === 'reviewed' && (
+          <ListPage
+            key={`reviewed-${currentUser.id}`}
+            view="reviewed"
+            onOpen={open}
+            showRequester
+            emptyText="You haven’t approved, rejected or sent back any requests yet."
+          />
         )}
         {page.name === 'all' && (
           <AllRequests key={`all-${currentUser.id}`} onOpen={open} filters={allFilters} setFilters={setAllFilters} />

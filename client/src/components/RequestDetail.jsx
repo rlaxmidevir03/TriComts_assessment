@@ -99,6 +99,11 @@ function ApproverPanel({ request, onDone }) {
       onDone()
     } catch (err) {
       setError(err.message)
+      // Someone changed it meanwhile: show the latest version so the approver decides on what's really there.
+      if (err.status === 409) {
+        setError('This request was changed since you opened it. The latest version is now shown – please review it again.')
+        onDone()
+      }
     }
     setBusy(false)
   }
@@ -139,6 +144,7 @@ function WithdrawButton({ request, onDone }) {
       onDone()
     } catch (err) {
       window.alert(err.message)
+      if (err.status === 409) onDone()
     }
   }
   return (

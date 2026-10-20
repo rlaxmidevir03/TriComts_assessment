@@ -30,10 +30,10 @@ export function requestRoutes(db) {
     res.json(store.listDepartments(db))
   })
 
-  // ?view=mine | inbox | all   (+ q, status, departmentId for "all")
+  // ?view=mine | inbox | reviewed | all   (+ q, status, departmentId for "all")
   router.get('/requests', (req, res) => {
     const view = req.query.view || 'mine'
-    if (!['mine', 'inbox', 'all'].includes(view)) return res.status(400).json({ error: 'Unknown view' })
+    if (!['mine', 'inbox', 'reviewed', 'all'].includes(view)) return res.status(400).json({ error: 'Unknown view' })
     if (view === 'all' && !SEE_EVERYTHING.includes(req.user.role)) {
       return res.status(403).json({ error: 'Only Finance can see all requests.' })
     }
@@ -73,11 +73,19 @@ export function requestRoutes(db) {
     act(req, res, (request) => workflow.withdraw(req.user, request))
   })
 
-  // Shared by every action: load → apply the rule → save (with its history row) → return the new state.
+  // Shared by every action: load → check version → apply the rule → save (with its history row) → reply.
   function act(req, res, rule) {
+    // Every change must say which version of the request the user was looking at, so nobody
+    // approves (or edits) something that changed after they opened it.
     const request = loadRequest(req.params.id)
+    const version = req.body?.version
+    if (!Number.isInteger(version)) {
+      throw new workflow.WorkflowError('invalid', 'Missing "version": the version of the request you are looking at.')
+    }
+    if (request.version !== version) throw new workflow.WorkflowError('conflict', store.STALE_MESSAGE)
+
     const result = rule(request, store.loadOrg(db))
-    store.applyResult(db, request.id, result)
+    store.applyResult(db, request.id, result, version)
     res.json(store.getRequest(db, request.id))
   }
 
@@ -88,7 +96,7 @@ export function requestRoutes(db) {
   }
 
   // Who can open a request: its requester, Finance/VP, anyone on its route or covering for them,
-  // and anyone who has acted on it before.
+  // anyone who has acted on it before, and anyone a backup acted for.
   function loadVisibleRequest(req) {
     const request = loadRequest(req.params.id)
     const user = req.user
