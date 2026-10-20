@@ -1,12 +1,188 @@
+/* Plain CSS, no UI library. Colours are defined once here. */
+:root {
+  --text: #1f2933;
+  --muted: #616e7c;
+  --bg: #f5f7fa;
+  --card: #ffffff;
+  --border: #d9e2ec;
+  --primary: #1f5fa8;
+  --primary-text: #ffffff;
+  --danger: #b42318;
+
+  --pending-bg: #fff4d6;   --pending-fg: #8a5a00;
+  --sent_back-bg: #e8eefc; --sent_back-fg: #2847a0;
+  --approved-bg: #dcf5e3;  --approved-fg: #1b6b35;
+  --rejected-bg: #fde4e1;  --rejected-fg: #a1271b;
+  --withdrawn-bg: #eceff3; --withdrawn-fg: #52606d;
+}
+
+* { box-sizing: border-box; }
+
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
-  color: #1f2933;
-  background: #f7f8fa;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--bg);
 }
 
 main {
-  max-width: 960px;
+  max-width: 980px;
   margin: 0 auto;
-  padding: 24px 16px;
+  padding: 20px 16px 48px;
+}
+
+h1, h2, h3 { margin: 0; }
+h1 { font-size: 18px; }
+h2 { font-size: 20px; }
+h3 { font-size: 16px; margin-bottom: 12px; }
+
+/* ---------- Top bar and tabs ---------- */
+.top-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.user-switcher { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; color: var(--muted); }
+.demo-tag {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--pending-bg);
+  color: var(--pending-fg);
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  border: none;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: none;
+  padding: 10px 12px;
+  color: var(--muted);
+}
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+.new-button { margin-left: auto; margin-bottom: 6px; }
+
+/* ---------- Controls ---------- */
+button {
+  font: inherit;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+}
+button:disabled { opacity: 0.6; cursor: default; }
+button.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+button.danger { color: var(--danger); border-color: var(--danger); }
+.link-button { border: none; background: none; padding: 0; margin-bottom: 12px; color: var(--primary); }
+
+input, select, textarea {
+  font: inherit;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text);
+}
+.user-switcher select { width: auto; max-width: 100%; }
+
+/* ---------- Cards and forms ---------- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.form { display: grid; gap: 14px; max-width: 640px; }
+.form label, .approver-panel label { display: grid; gap: 6px; font-weight: 600; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.hint { font-weight: normal; color: var(--muted); }
+
+.notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--sent_back-bg);
+  color: var(--sent_back-fg);
+}
+.error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--rejected-bg);
+  color: var(--rejected-fg);
+}
+.empty { color: var(--muted); padding: 24px 0; }
+
+/* ---------- Tables ---------- */
+.request-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.request-table th, .request-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.request-table th { font-size: 13px; color: var(--muted); background: var(--bg); }
+.request-table .num { text-align: right; white-space: nowrap; }
+.clickable { cursor: pointer; }
+.clickable:hover { background: var(--bg); }
+.link { color: var(--primary); font-weight: 600; white-space: nowrap; }
+
+/* ---------- Status badges ---------- */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.badge-pending   { background: var(--pending-bg);   color: var(--pending-fg); }
+.badge-sent_back { background: var(--sent_back-bg); color: var(--sent_back-fg); }
+.badge-approved  { background: var(--approved-bg);  color: var(--approved-fg); }
+.badge-rejected  { background: var(--rejected-bg);  color: var(--rejected-fg); }
+.badge-withdrawn { background: var(--withdrawn-bg); color: var(--withdrawn-fg); }
+
+/* ---------- Detail page ---------- */
+.detail-header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.facts { display: grid; grid-template-columns: 120px 1fr; gap: 8px 16px; margin: 0; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; }
+.pre { white-space: pre-wrap; }
+
+.route { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.route-step { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; }
+.route-step.done { background: var(--approved-bg); color: var(--approved-fg); border-color: transparent; }
+.route-step.current { background: var(--pending-bg); color: var(--pending-fg); border-color: var(--pending-fg); }
+.route-level { display: block; font-size: 12px; opacity: 0.8; }
+
+.history { list-style: none; margin: 0; padding: 0; }
+.history > li { padding: 10px 0 10px 16px; border-left: 3px solid var(--border); }
+.history .when { margin-left: 8px; color: var(--muted); font-size: 13px; }
+.history blockquote { margin: 6px 0 0; padding: 6px 10px; background: var(--bg); border-radius: 6px; }
+.changes { margin: 6px 0 0; padding-left: 18px; font-size: 14px; }
+del { color: var(--danger); }
+ins { color: var(--approved-fg); text-decoration: none; font-weight: 600; }
+
+/* ---------- Phones ---------- */
+@media (max-width: 640px) {
+  .user-switcher, .user-switcher select { width: 100%; }
+  .row { grid-template-columns: 1fr; }
+  .facts { grid-template-columns: 1fr; }
+  .request-table { display: block; overflow-x: auto; }
 }

@@ -158,7 +158,7 @@ function addHistory(db, requestId, h) {
 // Request + requester + department + current approver (+ who's covering for them).
 const LIST_SELECT = `
   SELECT r.*, u.name AS requester_name, d.id AS department_id, d.name AS department_name,
-         a.id AS approver_id, a.name AS approver_name, del.name AS delegate_name
+         a.id AS approver_id, a.name AS approver_name, del.id AS delegate_id, del.name AS delegate_name
   FROM requests r
   JOIN users u ON u.id = r.requester_id
   JOIN departments d ON d.id = u.department_id
@@ -183,7 +183,8 @@ function toRequest(r) {
     currentStep: r.current_step,
     currentApproverId: r.approver_id,
     currentApproverName: r.approver_name,
-    coveringDelegateName: r.delegate_name, // set when the current approver is away
+    coveringDelegateId: r.delegate_id, // set when the current approver is away
+    coveringDelegateName: r.delegate_name,
     daysWaiting: r.waiting_since ? Math.floor((Date.now() - Date.parse(r.waiting_since)) / DAY_MS) : null,
     version: r.version,
     createdAt: r.created_at,
