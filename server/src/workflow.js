@@ -17,6 +17,9 @@ export const THRESHOLDS = {
 
 export const CATEGORIES = ['Rush order', 'Repair', 'New vendor', 'Other']
 
+// Roles that can appear on an approval route.
+export const APPROVER_ROLES = ['manager', 'director', 'vp_finance']
+
 const EDITABLE_FIELDS = ['vendor', 'category', 'justification', 'amountCents']
 
 // kind is 'invalid' (bad input), 'forbidden' (not your call) or 'conflict' (wrong status).
@@ -178,6 +181,24 @@ export function checkCanAct(user, request, org) {
   if (approver?.id === user.id) return null
   if (approver?.delegateId === user.id) return approver.id // covering while they're away
   throw new WorkflowError('forbidden', 'This request is not waiting on you.')
+}
+
+// ---------- Vacation cover (Marcus, US-13) ----------
+
+// Can `user` name `delegate` as their backup while away? Pass null to clear it ("I'm back"),
+// or undefined if the chosen person doesn't exist.
+// The backup then acts on the user's waiting requests (see checkCanAct), and history
+// records "<backup> on behalf of <user>".
+export function checkDelegate(user, delegate) {
+  if (!APPROVER_ROLES.includes(user.role)) {
+    throw new WorkflowError('forbidden', 'Only approvers can name a backup.')
+  }
+  if (delegate === null) return
+  if (!delegate) throw new WorkflowError('invalid', 'Backup person not found.')
+  if (delegate.id === user.id) throw new WorkflowError('invalid', 'You cannot be your own backup.')
+  if (!APPROVER_ROLES.includes(delegate.role)) {
+    throw new WorkflowError('invalid', 'Your backup must be another approver (manager, director or VP).')
+  }
 }
 
 // ---------- Helpers ----------

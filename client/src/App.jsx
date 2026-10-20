@@ -5,6 +5,7 @@ import RequestTable from './components/RequestTable.jsx'
 import RequestForm from './components/RequestForm.jsx'
 import RequestDetail from './components/RequestDetail.jsx'
 import AllRequests, { NO_FILTERS } from './components/AllRequests.jsx'
+import BackupPanel from './components/BackupPanel.jsx'
 
 const APPROVER_ROLES = ['manager', 'director', 'vp_finance']
 const SEE_EVERYTHING = ['finance', 'vp_finance'] // same rule the server enforces
@@ -33,6 +34,7 @@ export default function App() {
   // { name: 'mine' | 'inbox' | 'all' | 'detail' | 'form', id?, request?, from? }
   const [page, setPage] = useState({ name: 'mine' })
   const [allFilters, setAllFilters] = useState(NO_FILTERS) // "All requests" search + filters
+  const [inboxVersion, setInboxVersion] = useState(0) // bumped to reload the inbox
 
   useEffect(() => {
     api('/users').then((list) => {
@@ -103,7 +105,16 @@ export default function App() {
           />
         )}
         {page.name === 'inbox' && (
-          <ListPage key={`inbox-${currentUser.id}`} view="inbox" onOpen={open} showRequester emptyText="Nothing is waiting on you." />
+          <>
+            <BackupPanel users={users} currentUser={currentUser} onChanged={() => setInboxVersion((v) => v + 1)} />
+            <ListPage
+              key={`inbox-${currentUser.id}-${inboxVersion}`}
+              view="inbox"
+              onOpen={open}
+              showRequester
+              emptyText="Nothing is waiting on you."
+            />
+          </>
         )}
         {page.name === 'all' && (
           <AllRequests key={`all-${currentUser.id}`} onOpen={open} filters={allFilters} setFilters={setAllFilters} />

@@ -198,6 +198,49 @@ describe('input and state errors', () => {
   })
 })
 
+describe('vacation backup (Marcus)', () => {
+  test('full flow: Morgan picks Jordan, Jordan approves on Morgan’s behalf, Morgan comes back', async () => {
+    const id = await submitAs(ALEX) // waiting on Morgan
+
+    // Morgan goes on vacation and names Jordan as backup.
+    const set = await call(MORGAN, 'PUT', '/me/delegate', { delegateId: JORDAN })
+    assert.equal(set.status, 200)
+    assert.equal(set.body.delegateName, 'Jordan Blake')
+
+    // Jordan now sees it in their inbox and approves it.
+    assert.deepEqual((await call(JORDAN, 'GET', '/requests?view=inbox')).body.map((r) => r.id), [id])
+    assert.equal((await call(JORDAN, 'POST', `/requests/${id}/approve`, {})).status, 200)
+
+    // History: Jordan approved on behalf of Morgan.
+    const approval = (await call(ALEX, 'GET', `/requests/${id}`)).body.history.at(-1)
+    assert.equal(approval.actorName, 'Jordan Blake')
+    assert.equal(approval.onBehalfOfName, 'Morgan Lee')
+
+    // Morgan comes back: Jordan no longer sees Morgan's new requests.
+    assert.equal((await call(MORGAN, 'PUT', '/me/delegate', { delegateId: null })).body.delegateName, null)
+    await submitAs(ALEX)
+    assert.deepEqual((await call(JORDAN, 'GET', '/requests?view=inbox')).body, [])
+  })
+
+  test('requests already waiting move to the backup immediately, and back when cleared', async () => {
+    const id = await submitAs(ALEX)
+    await call(MORGAN, 'PUT', '/me/delegate', { delegateId: JORDAN })
+    assert.equal((await call(JORDAN, 'GET', '/requests?view=inbox')).body[0].id, id)
+    await call(MORGAN, 'PUT', '/me/delegate', { delegateId: null })
+    assert.deepEqual((await call(JORDAN, 'GET', '/requests?view=inbox')).body, [])
+    assert.equal((await call(JORDAN, 'POST', `/requests/${id}/approve`, {})).status, 403)
+  })
+
+  test('invalid backups are refused', async () => {
+    assert.equal((await call(MORGAN, 'PUT', '/me/delegate', { delegateId: MORGAN })).status, 400) // self
+    assert.equal((await call(MORGAN, 'PUT', '/me/delegate', { delegateId: ALEX })).status, 400) // not an approver
+    assert.equal((await call(MORGAN, 'PUT', '/me/delegate', { delegateId: DANA })).status, 400) // finance
+    assert.equal((await call(MORGAN, 'PUT', '/me/delegate', { delegateId: 999 })).status, 400) // unknown
+    assert.equal((await call(ALEX, 'PUT', '/me/delegate', { delegateId: MORGAN })).status, 403) // employees approve nothing
+    assert.equal((await call(DANA, 'PUT', '/me/delegate', { delegateId: MORGAN })).status, 403) // finance approves nothing
+  })
+})
+
 describe('lists', () => {
   test('inbox shows only what is waiting on me', async () => {
     const id = await submitAs(ALEX)

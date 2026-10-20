@@ -100,6 +100,11 @@ export function listDepartments(db) {
 }
 
 // ---------- Writing ----------
+
+// Set or clear (null) who covers for this user while they're away.
+export function setDelegate(db, userId, delegateId) {
+  db.prepare('UPDATE users SET delegate_id = ? WHERE id = ?').run(delegateId, userId)
+}
 // A workflow result is { updates, steps?, history }. Each write below saves the request change,
 // the route (if rebuilt) and exactly one history row in ONE transaction, so you can never get
 // a status change without its audit entry, or the other way round.

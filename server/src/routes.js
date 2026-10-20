@@ -10,8 +10,21 @@ export function requestRoutes(db) {
   const router = Router()
 
   router.get('/me', (req, res) => {
-    res.json(req.user)
+    res.json(withDelegateName(req.user))
   })
+
+  // Vacation cover (Marcus, US-13): { delegateId: 5 } names a backup, { delegateId: null } clears it.
+  router.put('/me/delegate', (req, res) => {
+    const delegateId = req.body?.delegateId ?? null
+    const delegate = delegateId === null ? null : store.getUser(db, Number(delegateId)) ?? undefined
+    workflow.checkDelegate(req.user, delegate)
+    store.setDelegate(db, req.user.id, delegate?.id ?? null)
+    res.json(withDelegateName(store.getUser(db, req.user.id)))
+  })
+
+  function withDelegateName(user) {
+    return { ...user, delegateName: user.delegateId ? store.getUser(db, user.delegateId).name : null }
+  }
 
   router.get('/departments', (req, res) => {
     res.json(store.listDepartments(db))

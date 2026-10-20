@@ -10,6 +10,7 @@ import {
   sendBack,
   edit,
   withdraw,
+  checkDelegate,
   WorkflowError,
 } from '../src/workflow.js'
 
@@ -276,6 +277,42 @@ describe('edit and resubmit', () => {
     let request = pendingRequest(alex, 50000)
     request = applied(request, sendBack(morgan, request, org, 'Which machine?'))
     throwsWorkflow(() => approve(morgan, request, org), 'conflict')
+  })
+})
+
+// ---------- Choosing a backup while away (US-13, F1, F2) ----------
+describe('choosing a backup', () => {
+  test('an approver can pick another approver as backup', () => {
+    assert.doesNotThrow(() => checkDelegate(morgan, jordan))
+    assert.doesNotThrow(() => checkDelegate(daniel, victoria))
+  })
+
+  test('an approver can clear their backup (null = "I am back")', () => {
+    assert.doesNotThrow(() => checkDelegate(morgan, null))
+  })
+
+  test('employees and finance viewers cannot pick a backup (they approve nothing)', () => {
+    throwsWorkflow(() => checkDelegate(alex, jordan), 'forbidden')
+    throwsWorkflow(() => checkDelegate(dana, jordan), 'forbidden')
+  })
+
+  test('you cannot be your own backup', () => {
+    throwsWorkflow(() => checkDelegate(morgan, morgan), 'invalid', /own backup/i)
+  })
+
+  test('the backup must be an approver, not an employee or finance viewer', () => {
+    throwsWorkflow(() => checkDelegate(morgan, alex), 'invalid', /approver/i)
+    throwsWorkflow(() => checkDelegate(morgan, dana), 'invalid', /approver/i)
+  })
+
+  test('an unknown backup person is refused', () => {
+    throwsWorkflow(() => checkDelegate(morgan, undefined), 'invalid', /not found/i)
+  })
+
+  test('the backup can act on the full chain: reject and send back too, all marked "on behalf of"', () => {
+    const away = { ...org, users: users.map((u) => (u.id === morgan.id ? { ...u, delegateId: jordan.id } : u)) }
+    assert.equal(reject(jordan, pendingRequest(alex, 50000), away, 'No').history.onBehalfOfId, morgan.id)
+    assert.equal(sendBack(jordan, pendingRequest(alex, 50000), away, 'More info').history.onBehalfOfId, morgan.id)
   })
 })
 

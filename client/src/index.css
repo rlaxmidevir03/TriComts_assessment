@@ -150,6 +150,13 @@ input, select, textarea {
 .clickable:hover { background: var(--bg); }
 .link { color: var(--primary); font-weight: 600; white-space: nowrap; }
 
+/* ---------- Backup while away ---------- */
+.backup-panel { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 16px; }
+.backup-panel p { margin: 0; flex: 1; }
+.backup-panel select { width: auto; max-width: 100%; }
+.backup-panel .error { flex-basis: 100%; }
+.backup-panel.away { background: var(--pending-bg); color: var(--pending-fg); border-color: var(--pending-fg); }
+
 /* ---------- All requests: filters ---------- */
 .filters {
   display: grid;
