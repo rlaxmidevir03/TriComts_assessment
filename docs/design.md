@@ -147,7 +147,8 @@ for each level:
            vp → the VP of Finance
   while person is the requester: person = person's manager   (B1, B3: never approve your own)
   if no person found: refuse with "no eligible approver"      (B4)
-drop repeat people, keeping the first (one approval covers both stages, B2)
+if that person is already in the route: don't add them again, just raise their
+  step to this higher level (one approval covers both stages, B2)
 ```
 
 The two thresholds live in one constant in `workflow.js` (`THRESHOLDS = { director: 100000, vp: 1000000 }` in cents), so changing them is one line.
