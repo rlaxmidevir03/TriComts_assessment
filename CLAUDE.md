@@ -20,7 +20,8 @@ The developer must be able to explain every line in an interview, so **simple be
 7. **Synthetic data only.** No real names, companies, or secrets. Never commit `.env` files or keys.
 8. **Small steps.** Do one step at a time, run the tests, and stop for review before moving on.
 
-## Commands
-- Server: `cd server && npm install && npm run dev` (API on http://localhost:3001)
-- Server tests: `cd server && npm test`
-- Client: `cd client && npm install && npm run dev` (UI on http://localhost:5173, `/api` is proxied to the server)
+## Commands (from the project root)
+- `npm run setup` – install server and client dependencies (first time only)
+- `npm run dev` – start the API (http://localhost:3001) and the UI (http://localhost:5173) together; `/api` is proxied to the server
+- `npm test` – run the server test suite
+- `npm run reset-db` – wipe the local database and reload the demo data

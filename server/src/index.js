@@ -12,6 +12,12 @@ if (isEmpty(db)) {
   console.log('Seeded demo users and sample requests')
 }
 
-createApp(db).listen(PORT, () => {
+// Express 5 calls this callback on failure too, so check for an error before saying we're running.
+createApp(db).listen(PORT, (err) => {
+  if (err?.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Is the server already running in another terminal?`)
+    process.exit(1)
+  }
+  if (err) throw err
   console.log(`API running on http://localhost:${PORT}`)
 })

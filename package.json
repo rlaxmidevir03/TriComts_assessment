@@ -1,0 +1,11 @@
+{
+  "name": "purchase-exceptions",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "npm install --prefix server && npm install --prefix client",
+    "dev": "node dev.js",
+    "test": "npm test --prefix server",
+    "reset-db": "npm run reset-db --prefix server"
+  }
+}
