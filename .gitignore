@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.env
+
+# Local SQLite database files
+server/data/
+
+# The candidate brief must not be shared publicly
+docs/brief.md
