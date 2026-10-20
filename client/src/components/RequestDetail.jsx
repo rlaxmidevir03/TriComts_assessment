@@ -163,7 +163,8 @@ function Route({ request }) {
     if (step.stepNo < request.currentStep) return 'done'
     return step.stepNo === request.currentStep ? 'current' : 'idle'
   }
-  const LEVELS = { manager: 'Manager', director: 'Director', vp: 'VP of Finance' }
+  // The stage being signed, not the person's job title (the CFO signs the VP-level stage for the VP's own requests).
+  const LEVELS = { manager: 'Manager approval', director: 'Director approval', vp: 'VP-level approval' }
 
   return (
     <div className="card">

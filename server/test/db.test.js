@@ -25,14 +25,14 @@ test('seed creates the demo org with users for every role', () => {
   const db = seededDb()
   const roles = db.prepare('SELECT role, COUNT(*) AS n FROM users GROUP BY role').all()
   const count = Object.fromEntries(roles.map((r) => [r.role, r.n]))
-  assert.deepEqual(count, { director: 1, employee: 2, finance: 1, manager: 2, vp_finance: 1 })
+  assert.deepEqual(count, { cfo: 1, director: 1, employee: 2, finance: 1, manager: 2, vp_finance: 1 })
 })
 
-test('every department has a director and every non-VP user has a manager', () => {
+test('every department has a director and everyone except the CFO has a manager', () => {
   const db = seededDb()
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM departments WHERE director_id IS NULL').get().n, 0)
   const noManager = db.prepare('SELECT role FROM users WHERE manager_id IS NULL').all()
-  assert.deepEqual(noManager.map((u) => u.role), ['vp_finance'])
+  assert.deepEqual(noManager.map((u) => u.role), ['cfo'])
 })
 
 test('isEmpty is true before seeding and false after', () => {

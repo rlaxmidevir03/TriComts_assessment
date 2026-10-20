@@ -5,11 +5,12 @@ import { submit, approve, reject, sendBack } from './workflow.js'
 // Demo users and departments. All names are made up (synthetic data only).
 //
 // Org chart:
-//   Victoria Hale (VP of Finance)
-//   ├── Dana Whitfield (Finance – view only)
-//   └── Daniel Ortiz (Director of Operations and Warehouse)
-//       ├── Morgan Lee (Manager, Operations) ── Alex Chen (Employee)
-//       └── Jordan Blake (Manager, Warehouse) ── Taylor Brooks (Employee)
+//   Elena Marsh (CFO) – approves the VP's own requests; top of the org
+//   └── Victoria Hale (VP of Finance)
+//       ├── Dana Whitfield (Finance – view only)
+//       └── Daniel Ortiz (Director of Operations and Warehouse)
+//           ├── Morgan Lee (Manager, Operations) ── Alex Chen (Employee)
+//           └── Jordan Blake (Manager, Warehouse) ── Taylor Brooks (Employee)
 
 const DEPARTMENTS = [
   { id: 1, name: 'Operations' },
@@ -18,8 +19,10 @@ const DEPARTMENTS = [
 ]
 
 // Listed top-down so every manager is inserted before the people who report to them.
+// (Elena was added last, after the others had their ids, so she is id 8 but listed first.)
 const USERS = [
-  { id: 1, name: 'Victoria Hale', role: 'vp_finance', departmentId: 3, managerId: null },
+  { id: 8, name: 'Elena Marsh', role: 'cfo', departmentId: 3, managerId: null },
+  { id: 1, name: 'Victoria Hale', role: 'vp_finance', departmentId: 3, managerId: 8 },
   { id: 2, name: 'Dana Whitfield', role: 'finance', departmentId: 3, managerId: 1 },
   { id: 3, name: 'Daniel Ortiz', role: 'director', departmentId: 1, managerId: 1 },
   { id: 4, name: 'Morgan Lee', role: 'manager', departmentId: 1, managerId: 3 },

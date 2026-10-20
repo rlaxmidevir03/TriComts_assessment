@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY,
   name          TEXT NOT NULL,
   email         TEXT NOT NULL UNIQUE,         -- Microsoft sign-in will match users on this later
-  role          TEXT NOT NULL CHECK (role IN ('employee', 'manager', 'director', 'vp_finance', 'finance')),
+  role          TEXT NOT NULL CHECK (role IN ('employee', 'manager', 'director', 'vp_finance', 'cfo', 'finance')),
   department_id INTEGER NOT NULL REFERENCES departments(id),
   manager_id    INTEGER REFERENCES users(id),
   delegate_id   INTEGER REFERENCES users(id), -- set = "I'm away, this person covers me"

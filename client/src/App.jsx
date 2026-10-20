@@ -7,7 +7,7 @@ import RequestDetail from './components/RequestDetail.jsx'
 import AllRequests, { NO_FILTERS } from './components/AllRequests.jsx'
 import BackupPanel from './components/BackupPanel.jsx'
 
-const APPROVER_ROLES = ['manager', 'director', 'vp_finance']
+const APPROVER_ROLES = ['manager', 'director', 'vp_finance', 'cfo']
 const SEE_EVERYTHING = ['finance', 'vp_finance'] // same rule the server enforces
 const LIST_PAGES = ['mine', 'inbox', 'reviewed', 'all']
 
@@ -60,7 +60,8 @@ export default function App() {
 
   const isApprover = APPROVER_ROLES.includes(currentUser.role)
   const canSeeAll = SEE_EVERYTHING.includes(currentUser.role)
-  const canSubmit = currentUser.role !== 'finance'
+  // Finance viewers don't submit, and the CFO (top of the org) has nobody to approve their requests.
+  const canSubmit = currentUser.role !== 'finance' && currentUser.managerId !== null
   // Open a request, remembering which list we came from so "← Back" returns there.
   const open = (id) =>
     setPage({ name: 'detail', id, from: LIST_PAGES.includes(page.name) ? page.name : page.from ?? homePage(currentUser) })

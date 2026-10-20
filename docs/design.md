@@ -41,7 +41,7 @@ users 1───* requests 1───* approval_steps
 |---|---|---|
 | id | INTEGER PK | |
 | name, email | TEXT | Synthetic. `email` is what Microsoft sign-in will match on later. |
-| role | TEXT | `employee` · `manager` · `director` · `vp_finance` · `finance` |
+| role | TEXT | `employee` · `manager` · `director` · `vp_finance` · `cfo` · `finance` |
 | department_id | → departments.id | |
 | manager_id | → users.id, nullable | Who they report to. Drives stage 1 of the route. |
 | delegate_id | → users.id, nullable | **Set = "I'm away, this person covers me."** (F1) |
@@ -93,7 +93,8 @@ BEGIN SELECT RAISE(ABORT, 'request_history is append-only'); END;
 
 | Name | Role | Department | Reports to | Why they exist in the demo |
 |---|---|---|---|---|
-| Victoria Hale | vp_finance | Finance | — | Stage 3 for $10k+, can see everything |
+| Elena Marsh | cfo | Finance | — | Approves the VP's own requests (B4). Top of the org, so can't submit |
+| Victoria Hale | vp_finance | Finance | Elena | Stage 3 for $10k+, can see everything |
 | Dana Whitfield | finance | Finance | Victoria | Read-only company-wide view |
 | Daniel Ortiz | director | Operations | Victoria | Director of **both** Operations and Warehouse (stage 2) |
 | Morgan Lee | manager | Operations | Daniel | Manager (stage 1) |
@@ -101,7 +102,7 @@ BEGIN SELECT RAISE(ABORT, 'request_history is append-only'); END;
 | Alex Chen | employee | Operations | Morgan | Operations requester |
 | Taylor Brooks | employee | Warehouse | Jordan | Warehouse requester, so department filters have data |
 
-Seven users, as asked for in Step 4: two employees, two managers, one director, the VP of Finance and one finance viewer. (An earlier draft had a second director and a third employee; they were cut to keep the demo small.) Finance's director is set to Victoria for completeness, though finance viewers don't submit requests.
+Seven users were asked for in Step 4: two employees, two managers, one director, the VP of Finance and one finance viewer. (An earlier draft had a second director and a third employee; they were cut to keep the demo small.) The CFO was added later so the VP's own requests have an approver (B4). Finance's director is Victoria, so Victoria's requests skip up to Elena at every stage.
 
 Sample requests in different statuses are added once the workflow rules exist (Step 5), so they're created through the same rules as real ones.
 
@@ -125,8 +126,8 @@ stateDiagram-v2
 
 | From | Action | Who | To | History entry |
 |---|---|---|---|---|
-| — | submit | any user except finance viewer | Pending, step 1 | submitted |
-| Pending | approve | current approver or their delegate | Pending, next step **or** Approved | approved |
+| — | submit | anyone with a manager, except finance viewers | Pending, step 1 | submitted |
+| Pending | approve | current approver or their delegate, if they haven't approved another stage (B5) | Pending, next step **or** Approved | approved |
 | Pending | reject + comment | current approver or their delegate | Rejected | rejected |
 | Pending | send back + comment | current approver or their delegate | Sent back | sent_back |
 | Pending | edit | requester | Pending, **step 1**, route rebuilt | edited (with changes) |
@@ -155,6 +156,7 @@ The two thresholds live in one constant in `workflow.js` (`THRESHOLDS = { direct
 
 **Examples:** Alex $500 → Morgan. Alex $5,000 → Morgan → Daniel. Alex $14,000 → Morgan → Daniel → Victoria.
 Morgan $5,000 → Daniel (Morgan's manager *is* the director, so only one step). Daniel $5,000 → Victoria (Daniel can't approve himself, so it skips up).
+Victoria, any amount → Elena (the CFO). Elena → refused: nobody above her.
 
 ### Who may act on the current step
 
@@ -165,7 +167,13 @@ canAct(user, request) =
  AND user.role is not 'finance'                        (finance is read-only)
  AND (user is the step's approver
       OR the step's approver has delegate_id = user)   (vacation cover)
+
+approve also needs (B5, one person = one stage):
+     user has not approved any stage since the last submit/edit
+ AND if acting as a backup: user is not the approver of a later stage
 ```
+
+"Since the last submit/edit" is worked out from `request_history`, so it needs no extra column.
 
 ## 4. API outline
 

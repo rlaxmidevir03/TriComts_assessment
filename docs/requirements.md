@@ -13,9 +13,10 @@ Purchases outside the normal process are approved over email. Requests get lost 
 |---|---|---|
 | **Requester** | Any employee | Submit, edit, resubmit and withdraw their own requests. See their own requests and history. |
 | **Approver** | Manager, Department Director, VP of Finance | Everything a requester can, plus approve / reject / send back requests that are waiting on them. Set a backup (delegate) while away. |
-| **Finance viewer** | Finance Operations staff (e.g. Dana) | See **all** requests and their history. **Cannot** approve, reject or send back anything. |
+| **Finance viewer** | Finance Operations staff (e.g. Dana) | See **all** requests and their history. **Cannot** submit, approve, reject or send back anything. |
+| **CFO** | Chief Financial Officer (added for B4) | Approves the VP of Finance's own requests. Top of the org, so cannot submit. |
 
-A person has one role. Approvers are also employees, so they can submit their own requests.
+A person has one role. Approvers are also employees, so they can submit their own requests (as long as someone above them can approve).
 
 ## 3. Ambiguities, questions for the business, and working assumptions
 
@@ -39,7 +40,8 @@ These came from reading the email and kickoff notes. On a real project I'd send 
 | B1 | "A manager shouldn't approve their own stuff." Who approves a manager's request? | When a manager submits a request, who replaces them as approver? | The chain is built from the **requester's own manager upward**, so a manager's request goes to *their* manager. Nobody can ever be an approver on a request they submitted. |
 | B2 | The same person appears twice in the chain (e.g. a director's direct report: their manager *is* the director). | Does one approval count for both stages? | **Yes.** A person approves once, and duplicate stages are skipped. The history shows which stages that approval covered. |
 | B3 | The approver would be the requester (e.g. a director submits a $5,000 request). | Who signs instead? | **Skip to the next person up**, so the director's request goes to their manager (the VP). |
-| B4 | Who approves the VP of Finance's own requests? | Is there a CFO or CEO step? | **Open question.** Not in the demo data. The system blocks it with a clear message rather than allowing self-approval. |
+| B4 | Who approves the VP of Finance's own requests? | Is there a CFO or CEO step? | **The VP reports to a CFO, who approves the VP's requests** (a CFO was added to the demo data). This needs no special rule: the route skips up past the VP to their manager, as in B3. The CFO is the top of the org, so the CFO can't submit; their requests would need a CEO or board step, which is out of scope. *Still worth confirming with Dana.* |
+| B5 | Can one person approve two stages of the same request? (Found in the self-review: possible if they cover an earlier approver as a backup.) | Must a $1,000+ request always have two *different* approvers? | **Yes: one person approves at most one stage per round.** A backup can't approve an earlier stage if they also approve a later one, and nobody can approve a second stage after approving one. Rejecting or sending back is still allowed. |
 
 ### Approver actions
 
@@ -127,6 +129,7 @@ Priority: **Must** = needed for the demo · **Should** = included if time allows
 *As an auditor, I want the system to make conflicts of interest impossible, so that every approval is legitimate.*
 - No user can approve, reject or send back a request they submitted, even through delegation. The server refuses it, not just the UI.
 - A Finance viewer gets an error if they try any approval action, and the buttons are not shown to them.
+- One person can approve at most one stage of a request per round, even as a backup (B5).
 
 ### Editing
 
@@ -192,6 +195,6 @@ Priority: **Must** = needed for the demo · **Should** = included if time allows
 - Email or Teams notifications and reminders.
 - Auto-escalation when a request waits more than N days.
 - Attachments (quotes, invoices).
-- Who approves the VP of Finance's own requests (B4).
+- Who approves the CFO's own requests (B4: would need a CEO or board step).
 - Org-chart administration screens. Users and reporting lines are seed data.
 - Reporting and exports (CSV, dashboards).

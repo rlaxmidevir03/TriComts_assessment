@@ -35,7 +35,18 @@ export function getRequest(db, id) {
     )
     .all(id)
     .map((s) => ({ stepNo: s.step_no, level: s.level, approverId: s.approver_id, approverName: s.approver_name }))
-  return { ...toRequest(row), steps }
+  return { ...toRequest(row), steps, approvedThisRound: approvedThisRound(db, id) }
+}
+
+// Who has approved since the request was last submitted, edited or resubmitted.
+// Used by the "one person, one approval" rule in workflow.js.
+function approvedThisRound(db, requestId) {
+  let approvers = []
+  for (const h of db.prepare('SELECT action, actor_id FROM request_history WHERE request_id = ? ORDER BY id').all(requestId)) {
+    if (['submitted', 'edited', 'resubmitted'].includes(h.action)) approvers = [] // a new round starts
+    if (h.action === 'approved') approvers.push(h.actor_id)
+  }
+  return approvers
 }
 
 // The full audit trail for a request, oldest first.

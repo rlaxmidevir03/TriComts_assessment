@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { ROLE_LABELS } from '../format.js'
 
-const APPROVER_ROLES = ['manager', 'director', 'vp_finance']
+const APPROVER_ROLES = ['manager', 'director', 'vp_finance', 'cfo']
 
 // Marcus's vacation problem: an approver names a backup while they're away.
 // While set, the backup sees this approver's waiting requests and can act on them;

@@ -27,6 +27,7 @@ export const ROLE_LABELS = {
   manager: 'Manager',
   director: 'Director',
   vp_finance: 'VP of Finance',
+  cfo: 'Chief Financial Officer',
   finance: 'Finance (view only)',
 }
 

@@ -7,7 +7,7 @@ import { seed } from '../src/seed.js'
 import { createApp } from '../src/app.js'
 
 // Seeded user ids (see src/seed.js)
-const VICTORIA = 1, DANA = 2, DANIEL = 3, MORGAN = 4, JORDAN = 5, ALEX = 6, TAYLOR = 7
+const VICTORIA = 1, DANA = 2, DANIEL = 3, MORGAN = 4, JORDAN = 5, ALEX = 6, TAYLOR = 7, ELENA = 8
 
 let db, server, baseUrl
 
@@ -63,7 +63,7 @@ describe('sign-in', () => {
   test('the user switcher list works without signing in', async () => {
     const res = await call(null, 'GET', '/users')
     assert.equal(res.status, 200)
-    assert.equal(res.body.length, 7)
+    assert.equal(res.body.length, 8)
   })
 })
 
@@ -202,6 +202,49 @@ describe('input and state errors', () => {
   test('unknown request → 404', async () => {
     assert.equal((await call(ALEX, 'GET', '/requests/999')).status, 404)
     assert.equal((await call(MORGAN, 'POST', '/requests/999/approve', {})).status, 404)
+  })
+})
+
+describe('top of the org (B4)', () => {
+  test('the VP of Finance can submit; the CFO approves it', async () => {
+    const id = await submitAs(VICTORIA, 1500000)
+    assert.equal((await call(ELENA, 'GET', '/requests?view=inbox')).body[0].id, id)
+    assert.equal((await call(ELENA, 'POST', `/requests/${id}/approve`, {})).status, 200)
+    assert.equal(statusOf(id), 'approved')
+  })
+
+  test('the CFO cannot submit, because nobody is above them', async () => {
+    const res = await call(ELENA, 'POST', '/requests', newRequest())
+    assert.equal(res.status, 400)
+    assert.match(res.body.error, /no eligible approver/i)
+  })
+
+  test('the user list tells the UI who has a manager (who can submit)', async () => {
+    const users = (await call(null, 'GET', '/users')).body
+    assert.equal(users.find((u) => u.id === ELENA).managerId, null)
+    assert.equal(users.find((u) => u.id === VICTORIA).managerId, ELENA)
+  })
+})
+
+describe('one person approves at most one stage (end to end)', () => {
+  test('Daniel, as Morgan’s backup, cannot approve stage 1 of a request he approves at stage 2', async () => {
+    const id = await submitAs(ALEX, 500000) // Morgan → Daniel
+    await call(MORGAN, 'PUT', '/me/delegate', { delegateId: DANIEL })
+    const res = await call(DANIEL, 'POST', `/requests/${id}/approve`, {})
+    assert.equal(res.status, 403)
+    assert.match(res.body.error, /another stage/)
+    assert.equal(historyCount(id), 1)
+  })
+
+  test('Jordan, covering both Morgan and Daniel, can approve only one of the two stages', async () => {
+    const id = await submitAs(ALEX, 500000)
+    await call(MORGAN, 'PUT', '/me/delegate', { delegateId: JORDAN })
+    await call(DANIEL, 'PUT', '/me/delegate', { delegateId: JORDAN })
+    assert.equal((await call(JORDAN, 'POST', `/requests/${id}/approve`, {})).status, 200)
+    const second = await call(JORDAN, 'POST', `/requests/${id}/approve`, {})
+    assert.equal(second.status, 403)
+    assert.match(second.body.error, /already approved/)
+    assert.equal((await call(DANIEL, 'POST', `/requests/${id}/approve`, {})).status, 200) // Daniel himself still can
   })
 })
 

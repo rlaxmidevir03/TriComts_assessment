@@ -15,17 +15,18 @@ import {
 } from '../src/workflow.js'
 
 // ---------- A small org that mirrors the seed data ----------
-//   Victoria (VP) ── Dana (finance), Daniel (director of Operations + Warehouse)
+//   Elena (CFO) ── Victoria (VP) ── Dana (finance), Daniel (director of Operations + Warehouse)
 //   Daniel ── Morgan (manager, Ops) ── Alex (employee)
 //          └─ Jordan (manager, Warehouse) ── Taylor (employee)
 const users = [
-  { id: 1, name: 'Victoria Hale', role: 'vp_finance', departmentId: 3, managerId: null, delegateId: null },
+  { id: 1, name: 'Victoria Hale', role: 'vp_finance', departmentId: 3, managerId: 8, delegateId: null },
   { id: 2, name: 'Dana Whitfield', role: 'finance', departmentId: 3, managerId: 1, delegateId: null },
   { id: 3, name: 'Daniel Ortiz', role: 'director', departmentId: 1, managerId: 1, delegateId: null },
   { id: 4, name: 'Morgan Lee', role: 'manager', departmentId: 1, managerId: 3, delegateId: null },
   { id: 5, name: 'Jordan Blake', role: 'manager', departmentId: 2, managerId: 3, delegateId: null },
   { id: 6, name: 'Alex Chen', role: 'employee', departmentId: 1, managerId: 4, delegateId: null },
   { id: 7, name: 'Taylor Brooks', role: 'employee', departmentId: 2, managerId: 5, delegateId: null },
+  { id: 8, name: 'Elena Marsh', role: 'cfo', departmentId: 3, managerId: null, delegateId: null },
 ]
 const departments = [
   { id: 1, directorId: 3 },
@@ -33,7 +34,13 @@ const departments = [
   { id: 3, directorId: 1 },
 ]
 const org = { users, departments }
-const [victoria, dana, daniel, morgan, jordan, alex] = users
+const [victoria, dana, daniel, morgan, jordan, alex, , elena] = users
+
+// Marks some people as away with a backup, e.g. away({ [morgan.id]: jordan.id }).
+const away = (backups) => ({
+  ...org,
+  users: users.map((u) => (backups[u.id] ? { ...u, delegateId: backups[u.id] } : u)),
+})
 
 const fields = (amountCents) => ({
   vendor: 'Acme Industrial Repair',
@@ -45,11 +52,16 @@ const fields = (amountCents) => ({
 // Submits a request and returns it in the shape the database layer would hand back.
 function pendingRequest(requester, amountCents) {
   const result = submit(requester, fields(amountCents), org)
-  return { id: 1, requesterId: requester.id, ...result.updates, steps: result.steps }
+  return { id: 1, requesterId: requester.id, ...result.updates, steps: result.steps, approvedThisRound: [] }
 }
 
 // Applies a workflow result to a request, like the database layer will.
-const applied = (request, result) => ({ ...request, ...result.updates, steps: result.steps ?? request.steps })
+// approvedThisRound = who has approved since the last submit/edit (the store works it out from history).
+function applied(request, result) {
+  const { action, actorId } = result.history
+  const approvedThisRound = action === 'approved' ? [...request.approvedThisRound, actorId] : result.steps ? [] : request.approvedThisRound
+  return { ...request, ...result.updates, steps: result.steps ?? request.steps, approvedThisRound }
+}
 
 const approverIds = (steps) => steps.map((s) => s.approverId)
 
@@ -96,8 +108,13 @@ describe('no self-approval in the route', () => {
     assert.deepEqual(buildRoute(daniel, 1500000, org), [{ stepNo: 1, level: 'vp', approverId: victoria.id }])
   })
 
-  test('the VP of Finance has nobody above them, so the request is refused (B4)', () => {
-    throwsWorkflow(() => buildRoute(victoria, 50000, org), 'invalid', /no eligible approver/i)
+  test('the VP of Finance’s own requests go to the CFO, at any amount (B4)', () => {
+    assert.deepEqual(approverIds(buildRoute(victoria, 50000, org)), [elena.id])
+    assert.deepEqual(approverIds(buildRoute(victoria, 1500000, org)), [elena.id])
+  })
+
+  test('the CFO is the top of the org: nobody can approve their requests, so they are refused', () => {
+    throwsWorkflow(() => buildRoute(elena, 50000, org), 'invalid', /no eligible approver/i)
   })
 
   test('no requester is ever in their own route, for any user and amount', () => {
@@ -313,6 +330,53 @@ describe('choosing a backup', () => {
     const away = { ...org, users: users.map((u) => (u.id === morgan.id ? { ...u, delegateId: jordan.id } : u)) }
     assert.equal(reject(jordan, pendingRequest(alex, 50000), away, 'No').history.onBehalfOfId, morgan.id)
     assert.equal(sendBack(jordan, pendingRequest(alex, 50000), away, 'More info').history.onBehalfOfId, morgan.id)
+  })
+})
+
+// ---------- One person, one approval per round (separation of duties) ----------
+// Found in the self-review: the backup rule and the route rule were each fine alone, but together
+// they let one person approve two stages of the same request.
+describe('one person approves at most one stage', () => {
+  test('a later approver cannot also approve an earlier stage as someone’s backup', () => {
+    // Alex $5,000 → Morgan → Daniel. Morgan is away and picked Daniel as backup.
+    const request = pendingRequest(alex, 500000)
+    throwsWorkflow(() => approve(daniel, request, away({ [morgan.id]: daniel.id })), 'forbidden', /another stage/i)
+  })
+
+  test('…but the same backup can approve when they are not on the route', () => {
+    // Alex $500 → Morgan only, so Daniel covering for Morgan is fine.
+    const result = approve(daniel, pendingRequest(alex, 50000), away({ [morgan.id]: daniel.id }))
+    assert.equal(result.history.onBehalfOfId, morgan.id)
+  })
+
+  test('someone covering two approvers cannot approve both stages', () => {
+    // Jordan is the backup for both Morgan and Daniel.
+    const both = away({ [morgan.id]: jordan.id, [daniel.id]: jordan.id })
+    let request = pendingRequest(alex, 500000)
+    request = applied(request, approve(jordan, request, both)) // stage 1 for Morgan: fine
+    throwsWorkflow(() => approve(jordan, request, both), 'forbidden', /already approved/i) // stage 2 for Daniel: no
+  })
+
+  test('an approver cannot approve a later stage as a backup after approving their own', () => {
+    // Alex $5,000 → Morgan → Daniel. Morgan approves, then Daniel goes away and picks Morgan.
+    let request = pendingRequest(alex, 500000)
+    request = applied(request, approve(morgan, request, org))
+    throwsWorkflow(() => approve(morgan, request, away({ [daniel.id]: morgan.id })), 'forbidden', /already approved/i)
+  })
+
+  test('after an edit, a new round starts, so earlier approvals no longer count', () => {
+    let request = pendingRequest(alex, 50000)
+    request = applied(request, sendBack(morgan, request, org, 'Quote?'))
+    request = applied(request, edit(alex, request, { justification: 'Quote QS-114' }, org))
+    assert.deepEqual(request.approvedThisRound, [])
+    assert.equal(approve(morgan, request, org).updates.status, 'approved')
+  })
+
+  test('rejecting or sending back is still allowed (it needs no second person)', () => {
+    const request = pendingRequest(alex, 500000)
+    const covered = away({ [morgan.id]: daniel.id })
+    assert.equal(sendBack(daniel, request, covered, 'Quote?').updates.status, 'sent_back')
+    assert.equal(reject(daniel, request, covered, 'No').updates.status, 'rejected')
   })
 })
 

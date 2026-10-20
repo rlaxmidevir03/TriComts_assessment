@@ -17,8 +17,9 @@ export const THRESHOLDS = {
 
 export const CATEGORIES = ['Rush order', 'Repair', 'New vendor', 'Other']
 
-// Roles that can appear on an approval route.
-export const APPROVER_ROLES = ['manager', 'director', 'vp_finance']
+// Roles that can appear on an approval route. The CFO only appears when the VP of Finance
+// submits (the route skips up past the VP to their manager, the CFO).
+export const APPROVER_ROLES = ['manager', 'director', 'vp_finance', 'cfo']
 
 const EDITABLE_FIELDS = ['vendor', 'category', 'justification', 'amountCents']
 
@@ -134,6 +135,7 @@ export function withdraw(user, request) {
 // US-3: approve the current step. The last approval makes the whole request Approved.
 export function approve(user, request, org, comment) {
   const onBehalfOfId = checkCanAct(user, request, org)
+  checkOneApprovalPerPerson(user, request, onBehalfOfId)
   const isLastStep = request.currentStep >= request.steps.length
   return {
     updates: isLastStep
@@ -181,6 +183,24 @@ export function checkCanAct(user, request, org) {
   if (approver?.id === user.id) return null
   if (approver?.delegateId === user.id) return approver.id // covering while they're away
   throw new WorkflowError('forbidden', 'This request is not waiting on you.')
+}
+
+// Separation of duties: a request that needs two (or three) approvals must get them from
+// two (or three) different people, even when backups are covering. Only approving is limited;
+// anyone allowed to act may still reject or send back.
+//   request.approvedThisRound = ids of people who approved since the last submit/edit.
+function checkOneApprovalPerPerson(user, request, onBehalfOfId) {
+  if ((request.approvedThisRound ?? []).includes(user.id)) {
+    throw new WorkflowError('forbidden', 'You already approved an earlier stage of this request. A different person must approve this stage.')
+  }
+  // Covering an earlier stage would leave you unable to approve your own later one.
+  const ownStageLater = request.steps.some((s) => s.approverId === user.id && s.stepNo > request.currentStep)
+  if (onBehalfOfId && ownStageLater) {
+    throw new WorkflowError(
+      'forbidden',
+      'You also approve another stage of this request, so you cannot approve this stage as a backup. The away approver needs a different backup.',
+    )
+  }
 }
 
 // ---------- Vacation cover (Marcus, US-13) ----------

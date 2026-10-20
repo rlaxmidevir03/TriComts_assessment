@@ -16,7 +16,10 @@ export function createApp(db) {
   // Removed when Microsoft sign-in arrives.
   app.get('/api/users', (req, res) => {
     const users = db
-      .prepare('SELECT u.id, u.name, u.role, d.name AS departmentName FROM users u JOIN departments d ON d.id = u.department_id ORDER BY u.id')
+      .prepare(
+        `SELECT u.id, u.name, u.role, u.manager_id AS managerId, d.name AS departmentName
+         FROM users u JOIN departments d ON d.id = u.department_id ORDER BY u.id`,
+      )
       .all()
     res.json(users)
   })
