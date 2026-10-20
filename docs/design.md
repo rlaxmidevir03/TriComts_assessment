@@ -95,15 +95,15 @@ BEGIN SELECT RAISE(ABORT, 'request_history is append-only'); END;
 |---|---|---|---|---|
 | Victoria Hale | vp_finance | Finance | — | Stage 3 for $10k+, can see everything |
 | Dana Whitfield | finance | Finance | Victoria | Read-only company-wide view |
-| Daniel Ortiz | director | Operations | Victoria | Operations director (stage 2) |
+| Daniel Ortiz | director | Operations | Victoria | Director of **both** Operations and Warehouse (stage 2) |
 | Morgan Lee | manager | Operations | Daniel | Manager (stage 1) |
-| Alex Chen | employee | Operations | Morgan | Main requester |
-| Sam Rivera | employee | Operations | Morgan | Second requester |
-| Grace Kim | director | Warehouse | Victoria | Second department, for filters |
-| Jordan Blake | manager | Warehouse | Grace | Backup (delegate) for Morgan |
-| Taylor Brooks | employee | Warehouse | Jordan | Warehouse requester |
+| Jordan Blake | manager | Warehouse | Daniel | Second manager, and a backup (delegate) for Morgan |
+| Alex Chen | employee | Operations | Morgan | Operations requester |
+| Taylor Brooks | employee | Warehouse | Jordan | Warehouse requester, so department filters have data |
 
-A few sample requests in different statuses are seeded so every screen has data.
+Seven users, as asked for in Step 4: two employees, two managers, one director, the VP of Finance and one finance viewer. (An earlier draft had a second director and a third employee; they were cut to keep the demo small.) Finance's director is set to Victoria for completeness, though finance viewers don't submit requests.
+
+Sample requests in different statuses are added once the workflow rules exist (Step 5), so they're created through the same rules as real ones.
 
 ## 3. Statuses and transitions
 

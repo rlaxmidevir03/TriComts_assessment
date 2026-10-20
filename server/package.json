@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/index.js",
     "dev": "node --disable-warning=ExperimentalWarning --watch src/index.js",
+    "reset-db": "node --disable-warning=ExperimentalWarning src/reset-db.js",
     "test": "node --disable-warning=ExperimentalWarning --test"
   },
   "dependencies": {
