@@ -1,0 +1,238 @@
+// API tests: the real Express app on a random port, with a fresh in-memory database per test.
+// Focus: permissions (403s), required comments, locked requests, and "every action = one history row".
+import { test, describe, beforeEach, afterEach } from 'node:test'
+import assert from 'node:assert/strict'
+import { openDb } from '../src/db.js'
+import { seed } from '../src/seed.js'
+import { createApp } from '../src/app.js'
+
+// Seeded user ids (see src/seed.js)
+const VICTORIA = 1, DANA = 2, DANIEL = 3, MORGAN = 4, JORDAN = 5, ALEX = 6, TAYLOR = 7
+
+let db, server, baseUrl
+
+beforeEach(() => {
+  db = openDb(':memory:')
+  seed(db)
+  server = createApp(db).listen(0)
+  baseUrl = `http://localhost:${server.address().port}/api`
+})
+
+afterEach(() => server.close())
+
+// Calls the API as a given demo user. Returns { status, body }.
+async function call(userId, method, path, body) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (userId) headers['X-User-Id'] = String(userId)
+  const res = await fetch(baseUrl + path, { method, headers, body: body && JSON.stringify(body) })
+  return { status: res.status, body: await res.json() }
+}
+
+const newRequest = (amountCents = 50000) => ({
+  vendor: 'Acme Industrial Repair',
+  category: 'Repair',
+  justification: 'Conveyor motor failed',
+  amountCents,
+})
+
+async function submitAs(userId, amountCents) {
+  const res = await call(userId, 'POST', '/requests', newRequest(amountCents))
+  assert.equal(res.status, 201, JSON.stringify(res.body))
+  return res.body.id
+}
+
+const historyCount = (id) => db.prepare('SELECT COUNT(*) AS n FROM request_history WHERE request_id = ?').get(id).n
+const statusOf = (id) => db.prepare('SELECT status FROM requests WHERE id = ?').get(id).status
+
+describe('sign-in', () => {
+  test('no user header → 401', async () => {
+    assert.equal((await call(null, 'GET', '/requests')).status, 401)
+  })
+
+  test('unknown user id → 401', async () => {
+    assert.equal((await call(999, 'GET', '/requests')).status, 401)
+  })
+
+  test('the user switcher list works without signing in', async () => {
+    const res = await call(null, 'GET', '/users')
+    assert.equal(res.status, 200)
+    assert.equal(res.body.length, 7)
+  })
+})
+
+describe('every action adds exactly one history row', () => {
+  test('submit → edit → approve → send back → resubmit → approve → approve', async () => {
+    const id = await submitAs(ALEX, 50000)
+    assert.equal(historyCount(id), 1)
+
+    await call(ALEX, 'PUT', `/requests/${id}`, { amountCents: 150000 }) // now needs the director too
+    assert.equal(historyCount(id), 2)
+
+    await call(MORGAN, 'POST', `/requests/${id}/approve`, {})
+    assert.equal(historyCount(id), 3)
+
+    await call(DANIEL, 'POST', `/requests/${id}/send-back`, { comment: 'Which conveyor?' })
+    assert.equal(historyCount(id), 4)
+
+    await call(ALEX, 'PUT', `/requests/${id}`, { justification: 'Conveyor 3 motor failed', comment: 'Added detail' })
+    assert.equal(historyCount(id), 5)
+
+    await call(MORGAN, 'POST', `/requests/${id}/approve`, {}) // restarted at step 1
+    await call(DANIEL, 'POST', `/requests/${id}/approve`, {})
+    assert.equal(historyCount(id), 7)
+    assert.equal(statusOf(id), 'approved')
+
+    const { body } = await call(ALEX, 'GET', `/requests/${id}`)
+    assert.deepEqual(
+      body.history.map((h) => h.action),
+      ['submitted', 'edited', 'approved', 'sent_back', 'resubmitted', 'approved', 'approved'],
+    )
+    assert.deepEqual(body.history[1].changes, { amountCents: [50000, 150000] })
+  })
+
+  test('reject and withdraw each add one row', async () => {
+    const a = await submitAs(ALEX)
+    await call(MORGAN, 'POST', `/requests/${a}/reject`, { comment: 'Use the contracted vendor' })
+    assert.equal(historyCount(a), 2)
+
+    const b = await submitAs(ALEX)
+    await call(ALEX, 'POST', `/requests/${b}/withdraw`, {})
+    assert.equal(historyCount(b), 2)
+    assert.equal(statusOf(b), 'withdrawn')
+  })
+
+  test('a refused action adds NO history row and changes nothing', async () => {
+    const id = await submitAs(ALEX)
+    await call(JORDAN, 'POST', `/requests/${id}/approve`, {})
+    await call(MORGAN, 'POST', `/requests/${id}/reject`, { comment: '' })
+    assert.equal(historyCount(id), 1)
+    assert.equal(statusOf(id), 'pending')
+  })
+})
+
+describe('permissions', () => {
+  test('approving a request that is not waiting on you → 403', async () => {
+    const id = await submitAs(ALEX) // waiting on Morgan
+    const res = await call(JORDAN, 'POST', `/requests/${id}/approve`, {})
+    assert.equal(res.status, 403)
+    assert.match(res.body.error, /not waiting on you/)
+  })
+
+  test('a later-stage approver cannot jump ahead → 403', async () => {
+    const id = await submitAs(ALEX, 1400000) // Morgan → Daniel → Victoria
+    assert.equal((await call(VICTORIA, 'POST', `/requests/${id}/approve`, {})).status, 403)
+    assert.equal((await call(DANIEL, 'POST', `/requests/${id}/approve`, {})).status, 403)
+  })
+
+  test('finance cannot approve, reject or send back → 403', async () => {
+    const id = await submitAs(ALEX)
+    for (const action of ['approve', 'reject', 'send-back']) {
+      const res = await call(DANA, 'POST', `/requests/${id}/${action}`, { comment: 'Trying anyway' })
+      assert.equal(res.status, 403, action)
+    }
+  })
+
+  test('finance cannot submit requests → 403', async () => {
+    assert.equal((await call(DANA, 'POST', '/requests', newRequest())).status, 403)
+  })
+
+  test('editing another person’s request → 403', async () => {
+    const id = await submitAs(ALEX)
+    assert.equal((await call(MORGAN, 'PUT', `/requests/${id}`, { amountCents: 100 })).status, 403)
+    assert.equal((await call(TAYLOR, 'PUT', `/requests/${id}`, { amountCents: 100 })).status, 403)
+  })
+
+  test('withdrawing another person’s request → 403', async () => {
+    const id = await submitAs(ALEX)
+    assert.equal((await call(MORGAN, 'POST', `/requests/${id}/withdraw`, {})).status, 403)
+  })
+
+  test('a manager cannot approve their own request → 403', async () => {
+    const id = await submitAs(MORGAN) // goes to Daniel; make Morgan Daniel's backup and try anyway
+    db.prepare('UPDATE users SET delegate_id = ? WHERE id = ?').run(MORGAN, DANIEL)
+    const res = await call(MORGAN, 'POST', `/requests/${id}/approve`, {})
+    assert.equal(res.status, 403)
+    assert.match(res.body.error, /own request/)
+  })
+
+  test('viewing someone else’s request → 403, but Finance and approvers can see it', async () => {
+    const id = await submitAs(ALEX)
+    assert.equal((await call(TAYLOR, 'GET', `/requests/${id}`)).status, 403)
+    assert.equal((await call(JORDAN, 'GET', `/requests/${id}`)).status, 403)
+    assert.equal((await call(DANA, 'GET', `/requests/${id}`)).status, 200)
+    assert.equal((await call(MORGAN, 'GET', `/requests/${id}`)).status, 200)
+  })
+
+  test('the company-wide list is for Finance only → 403 for others', async () => {
+    assert.equal((await call(ALEX, 'GET', '/requests?view=all')).status, 403)
+    assert.equal((await call(MORGAN, 'GET', '/requests?view=all')).status, 403)
+    assert.equal((await call(DANA, 'GET', '/requests?view=all')).status, 200)
+    assert.equal((await call(VICTORIA, 'GET', '/requests?view=all')).status, 200)
+  })
+})
+
+describe('input and state errors', () => {
+  test('reject without a reason → 400', async () => {
+    const id = await submitAs(ALEX)
+    const res = await call(MORGAN, 'POST', `/requests/${id}/reject`, {})
+    assert.equal(res.status, 400)
+    assert.match(res.body.error, /reason/)
+  })
+
+  test('invalid new request → 400', async () => {
+    assert.equal((await call(ALEX, 'POST', '/requests', { ...newRequest(), amountCents: 0 })).status, 400)
+    assert.equal((await call(ALEX, 'POST', '/requests', { ...newRequest(), vendor: '' })).status, 400)
+    assert.equal((await call(ALEX, 'POST', '/requests', {})).status, 400)
+  })
+
+  test('acting on a finished request → 409', async () => {
+    const id = await submitAs(ALEX)
+    await call(MORGAN, 'POST', `/requests/${id}/approve`, {})
+    assert.equal((await call(MORGAN, 'POST', `/requests/${id}/approve`, {})).status, 409)
+    assert.equal((await call(ALEX, 'PUT', `/requests/${id}`, { amountCents: 100 })).status, 409)
+  })
+
+  test('unknown request → 404', async () => {
+    assert.equal((await call(ALEX, 'GET', '/requests/999')).status, 404)
+    assert.equal((await call(MORGAN, 'POST', '/requests/999/approve', {})).status, 404)
+  })
+})
+
+describe('lists', () => {
+  test('inbox shows only what is waiting on me', async () => {
+    const id = await submitAs(ALEX)
+    assert.deepEqual((await call(MORGAN, 'GET', '/requests?view=inbox')).body.map((r) => r.id), [id])
+    assert.deepEqual((await call(JORDAN, 'GET', '/requests?view=inbox')).body, [])
+  })
+
+  test('a delegate sees the away approver’s inbox items', async () => {
+    const id = await submitAs(ALEX)
+    db.prepare('UPDATE users SET delegate_id = ? WHERE id = ?').run(JORDAN, MORGAN)
+    const inbox = (await call(JORDAN, 'GET', '/requests?view=inbox')).body
+    assert.deepEqual(inbox.map((r) => r.id), [id])
+    assert.equal(inbox[0].coveringDelegateName, 'Jordan Blake')
+  })
+
+  test('mine shows only my requests, with status and current approver', async () => {
+    await submitAs(ALEX)
+    await submitAs(TAYLOR)
+    const mine = (await call(ALEX, 'GET', '/requests?view=mine')).body
+    assert.equal(mine.length, 1)
+    assert.equal(mine[0].status, 'pending')
+    assert.equal(mine[0].currentApproverName, 'Morgan Lee')
+  })
+
+  test('finance can search and filter the company-wide list', async () => {
+    await submitAs(ALEX) // Operations
+    const taylorId = await submitAs(TAYLOR) // Warehouse
+    await call(TAYLOR, 'POST', `/requests/${taylorId}/withdraw`, {})
+
+    const all = async (query) => (await call(DANA, 'GET', `/requests?view=all${query}`)).body
+    assert.equal((await all('')).length, 2)
+    assert.equal((await all('&status=withdrawn')).length, 1)
+    assert.equal((await all('&departmentId=2'))[0].requesterName, 'Taylor Brooks')
+    assert.equal((await all('&q=taylor')).length, 1)
+    assert.equal((await all('&q=acme')).length, 2)
+    assert.equal((await all('&q=nothing-matches')).length, 0)
+  })
+})

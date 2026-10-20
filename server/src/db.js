@@ -12,6 +12,19 @@ export function openDb(file = process.env.DB_FILE || 'data/app.db') {
   return db
 }
 
+// Runs fn inside a transaction: either everything it writes is saved, or (on any error) nothing is.
+export function transaction(db, fn) {
+  db.exec('BEGIN')
+  try {
+    const result = fn()
+    db.exec('COMMIT')
+    return result
+  } catch (err) {
+    db.exec('ROLLBACK')
+    throw err
+  }
+}
+
 // Timestamps are stored as ISO text in UTC, e.g. 2026-10-20T14:05:09.123Z
 const NOW = `(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`
 

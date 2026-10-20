@@ -1,3 +1,7 @@
+import { transaction } from './db.js'
+import { loadOrg, getRequest, createRequest, applyResult } from './store.js'
+import { submit, approve, reject, sendBack } from './workflow.js'
+
 // Demo users and departments. All names are made up (synthetic data only).
 //
 // Org chart:
@@ -33,8 +37,7 @@ function emailFor(name) {
 }
 
 export function seed(db) {
-  db.exec('BEGIN')
-  try {
+  transaction(db, () => {
     // Departments and users point at each other, so departments go in first
     // without a director, then the director is filled in once users exist.
     const addDept = db.prepare('INSERT INTO departments (id, name) VALUES (?, ?)')
@@ -47,12 +50,43 @@ export function seed(db) {
 
     const setDirector = db.prepare('UPDATE departments SET director_id = ? WHERE id = ?')
     for (const [deptId, directorId] of Object.entries(DIRECTORS)) setDirector.run(directorId, Number(deptId))
+  })
+}
 
-    db.exec('COMMIT')
-  } catch (err) {
-    db.exec('ROLLBACK')
-    throw err
-  }
+// Sample requests in different states, so every screen has something to show.
+// They're created through the real workflow rules, so their history is genuine.
+export function seedSampleRequests(db) {
+  const org = loadOrg(db)
+  const user = (id) => org.users.find((u) => u.id === id)
+  const [daniel, morgan, jordan, alex, taylor] = [3, 4, 5, 6, 7].map(user)
+
+  const newRequest = (requester, vendor, category, amountCents, justification) =>
+    createRequest(db, requester.id, submit(requester, { vendor, category, amountCents, justification }, org))
+  const then = (id, rule) => applyResult(db, id, rule(getRequest(db, id)))
+
+  // 1. Small rush order, waiting on the manager.
+  newRequest(alex, 'QuickShip Logistics', 'Rush order', 45000, 'Overnight freight for a customer order that missed the weekly truck.')
+
+  // 2. Mid-size repair: manager approved, now waiting on the director.
+  const repair = newRequest(alex, 'Acme Industrial Repair', 'Repair', 480000, 'Conveyor 3 drive motor failed; line is down until it is replaced.')
+  then(repair, (r) => approve(morgan, r, org, 'Confirmed with the shift lead.'))
+
+  // 3. Dana's $14,000 story: manager and director approved, waiting on the VP of Finance.
+  const forklift = newRequest(taylor, 'Northwind Forklift Services', 'New vendor', 1400000, 'Emergency forklift rental while our two units are out for inspection.')
+  then(forklift, (r) => approve(jordan, r, org))
+  then(forklift, (r) => approve(daniel, r, org, 'No contracted vendor had units available this week.'))
+
+  // 4. Sent back for more information.
+  const safety = newRequest(taylor, 'Brightline Safety Supply', 'Other', 230000, 'Replacement safety harnesses for the mezzanine team.')
+  then(safety, (r) => sendBack(jordan, r, org, 'Please add the quote number and how many harnesses.'))
+
+  // 5. Fully approved.
+  const hvac = newRequest(alex, 'Metro HVAC Co.', 'Repair', 78000, 'Office AC compressor repair before the heat wave.')
+  then(hvac, (r) => approve(morgan, r, org))
+
+  // 6. Rejected with a reason. (A manager's own request goes to their manager, the director.)
+  const chairs = newRequest(morgan, 'Summit Office Interiors', 'New vendor', 620000, 'Ergonomic chairs for the operations office.')
+  then(chairs, (r) => reject(daniel, r, org, 'Please order through our contracted furniture vendor instead.'))
 }
 
 export function isEmpty(db) {
