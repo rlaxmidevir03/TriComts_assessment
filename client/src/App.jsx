@@ -4,8 +4,18 @@ import UserSwitcher from './components/UserSwitcher.jsx'
 import RequestTable from './components/RequestTable.jsx'
 import RequestForm from './components/RequestForm.jsx'
 import RequestDetail from './components/RequestDetail.jsx'
+import AllRequests, { NO_FILTERS } from './components/AllRequests.jsx'
 
 const APPROVER_ROLES = ['manager', 'director', 'vp_finance']
+const SEE_EVERYTHING = ['finance', 'vp_finance'] // same rule the server enforces
+const LIST_PAGES = ['mine', 'inbox', 'all']
+
+// The page each role lands on after switching user.
+function homePage(user) {
+  if (user.role === 'finance') return 'all'
+  if (APPROVER_ROLES.includes(user.role)) return 'inbox'
+  return 'mine'
+}
 
 // Remember the chosen demo user between page reloads (a convenience only).
 function savedUserId() {
@@ -20,8 +30,9 @@ export default function App() {
   const [users, setUsers] = useState([])
   const [currentUser, setUser] = useState(null)
   // Which screen is showing. Kept as simple state instead of adding a router library.
-  // { name: 'mine' | 'inbox' | 'detail' | 'form', id?, request? }
+  // { name: 'mine' | 'inbox' | 'all' | 'detail' | 'form', id?, request?, from? }
   const [page, setPage] = useState({ name: 'mine' })
+  const [allFilters, setAllFilters] = useState(NO_FILTERS) // "All requests" search + filters
 
   useEffect(() => {
     api('/users').then((list) => {
@@ -39,14 +50,18 @@ export default function App() {
     }
     const user = list.find((u) => u.id === id)
     setUser(user)
-    setPage({ name: APPROVER_ROLES.includes(user.role) ? 'inbox' : 'mine' })
+    setAllFilters(NO_FILTERS)
+    setPage({ name: homePage(user) })
   }
 
   if (!currentUser) return <main>Loading…</main>
 
   const isApprover = APPROVER_ROLES.includes(currentUser.role)
+  const canSeeAll = SEE_EVERYTHING.includes(currentUser.role)
   const canSubmit = currentUser.role !== 'finance'
-  const open = (id) => setPage({ name: 'detail', id })
+  // Open a request, remembering which list we came from so "← Back" returns there.
+  const open = (id) =>
+    setPage({ name: 'detail', id, from: LIST_PAGES.includes(page.name) ? page.name : page.from ?? homePage(currentUser) })
 
   return (
     <>
@@ -57,12 +72,19 @@ export default function App() {
 
       <main>
         <nav className="tabs">
-          <Tab page={page} name="mine" setPage={setPage}>
-            My requests
-          </Tab>
+          {canSubmit && (
+            <Tab page={page} name="mine" setPage={setPage}>
+              My requests
+            </Tab>
+          )}
           {isApprover && (
             <Tab page={page} name="inbox" setPage={setPage}>
               Awaiting my approval
+            </Tab>
+          )}
+          {canSeeAll && (
+            <Tab page={page} name="all" setPage={setPage}>
+              All requests
             </Tab>
           )}
           {canSubmit && (
@@ -77,18 +99,21 @@ export default function App() {
             key={`mine-${currentUser.id}`}
             view="mine"
             onOpen={open}
-            emptyText={canSubmit ? 'You have no requests yet. Use “New request” to create one.' : 'Finance viewers do not submit requests.'}
+            emptyText="You have no requests yet. Use “New request” to create one."
           />
         )}
         {page.name === 'inbox' && (
           <ListPage key={`inbox-${currentUser.id}`} view="inbox" onOpen={open} showRequester emptyText="Nothing is waiting on you." />
         )}
+        {page.name === 'all' && (
+          <AllRequests key={`all-${currentUser.id}`} onOpen={open} filters={allFilters} setFilters={setAllFilters} />
+        )}
         {page.name === 'detail' && (
           <RequestDetail
             id={page.id}
             currentUser={currentUser}
-            onEdit={(request) => setPage({ name: 'form', request })}
-            onBack={() => setPage({ name: isApprover ? 'inbox' : 'mine' })}
+            onEdit={(request) => setPage({ name: 'form', request, from: page.from })}
+            onBack={() => setPage({ name: page.from })}
           />
         )}
         {page.name === 'form' && (

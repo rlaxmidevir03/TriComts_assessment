@@ -150,6 +150,18 @@ input, select, textarea {
 .clickable:hover { background: var(--bg); }
 .link { color: var(--primary); font-weight: 600; white-space: nowrap; }
 
+/* ---------- All requests: filters ---------- */
+.filters {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+.filters label { display: grid; gap: 6px; font-weight: 600; font-size: 14px; }
+.filters .clear { margin: 0 0 10px; }
+.result-count { margin: 0 0 8px; color: var(--muted); font-size: 14px; }
+
 /* ---------- Status badges ---------- */
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .badge-pending   { background: var(--pending-bg);   color: var(--pending-fg); }
@@ -182,7 +194,7 @@ ins { color: var(--approved-fg); text-decoration: none; font-weight: 600; }
 /* ---------- Phones ---------- */
 @media (max-width: 640px) {
   .user-switcher, .user-switcher select { width: 100%; }
-  .row { grid-template-columns: 1fr; }
+  .row, .filters { grid-template-columns: 1fr; }
   .facts { grid-template-columns: 1fr; }
   .request-table { display: block; overflow-x: auto; }
 }
