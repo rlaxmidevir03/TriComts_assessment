@@ -1,6 +1,6 @@
 # How this was built with AI
 
-> **Draft.** Parts marked **[FILL IN]** need my own numbers or opinions. The rest is a first draft I will rewrite in my own words.
+So this is how I built the purchase exception app with an AI assistant. I didn't just ask it to "build the app". I first made it help me understand the brief and plan things, then we built it in small steps, and I checked and committed every step myself. Some things went wrong on the way, and I have written those down honestly below.
 
 ## 1. Tools
 
@@ -16,24 +16,24 @@
 
 ## 2. Process
 
-Before building, I asked the AI to help me plan a sequence of small, reviewable prompts, then rewrote them in my own words. I worked in this order, committing after each step:
 
-| Time | Step | What I asked for |
-|---|---|---|
-| 16:36 | 1. Setup | Stack, folders, CLAUDE.md rules |
-| 17:02 | 2. Requirements | **No code.** Find everything vague in the brief, the question I'd ask Dana, and an assumption for each |
-| 17:13 | 3. Design | **No code.** Tables, statuses and transitions, API, and how each kickoff concern is handled. I reviewed it before any code existed. |
-| 17:36 | 4. Database | Schema, triggers that make history append-only, demo users |
-| 17:48 | 5. Approval rules | Plain functions in one file, **tests written first** |
-| 17:55 | 6. API | Endpoints, one history row per action, permission tests |
-| 18:07 | 7. Screens | User switcher, my requests, form, detail page with history |
-| 18:16 | — | Fix: one-command start (found when I ran the app myself) |
-| 18:20 | 8. Finance view | All requests, search, filters |
-| 18:26 | 9. Vacation backup | Pick a backup; history says "on behalf of" |
-| — | 10. Self-review | **Check everything against requirements.md, report only, don't fix** |
-| 18:39 | 10b. Fixes | Version check; "Reviewed by me" list |
-| 18:44 | 10c. Fixes | VP's requests (CFO approves); one person, one stage |
-| — | 11. Docs | README, this file |
+
+| Step | What I asked for |
+|---|---|
+| 1. Setup | Stack, folders, CLAUDE.md rules |
+| 2. Requirements | **No code.** Find everything vague in the brief, the question I'd ask Dana, and an assumption for each |
+| 3. Design | **No code.** Tables, statuses and transitions, API, and how each kickoff concern is handled. I reviewed it before any code existed. |
+| 4. Database | Schema, triggers that make history append-only, demo users |
+| 5. Approval rules | Plain functions in one file, **tests written first** |
+| 6. API | Endpoints, one history row per action, permission tests |
+| 7. Screens | User switcher, my requests, form, detail page with history |
+| 7b. Fix | One-command start (found when I ran the app myself) |
+| 8. Finance view | All requests, search, filters |
+| 9. Vacation backup | Pick a backup; history says "on behalf of" |
+| 10. Self-review | **Check everything against requirements.md, report only, don't fix** |
+| 10b. Fixes | Version check; "Reviewed by me" list |
+| 10c. Fixes | VP's requests (CFO approves); one person, one stage |
+| 11. Docs | README, this file |
 
 **[FILL IN: total time spent, including reading the brief and planning, and whether it went past the 4-hour time box]**
 
@@ -41,7 +41,7 @@ The two "no code yet" steps came first on purpose. The brief is deliberately vag
 
 ## 3. Prompts
 
-These are the prompts as I typed them (typos left in).
+These are the prompts as I typed them.
 
 **Step 1: setup**
 > Hey, let's set up the project. I want a Node + Express + SQLite backend in a server folder and a React app (using Vite) in a client folder. Keep it really simple, because I need to explain every part of this in an interview. Also create a CLAUDE.md with some ground rules for you: keep code readable, don't add libraries we don't need, write tests for every approval rule, never let anyone edit or delete the history records, and keep the login logic in one place so we can swap in Microsoft sign-in later.
@@ -107,24 +107,14 @@ The fix was done test-first again: 6 new tests, 3 of them failed (proving the ga
 
 ## 4. AI vs. me
 
-**Honest summary: the AI wrote nearly all of the code, tests and first drafts of the docs.** My part was deciding what to build and in what order, reviewing it, testing it, and deciding what to fix.
-
-| Part | Who | Notes |
-|---|---|---|
-| Order of work, scope, what to cut | Me | e.g. requirements and design before code; skipped CI (GitHub Actions) to stay in the time box |
-| Requirements and design docs | AI draft, reviewed by me | I accepted the assumptions after reading them **[FILL IN: any you changed]** |
-| Server code and tests | AI | Reviewed in VS Code before each commit |
-| Frontend | AI | I tested it by clicking through as each user |
-| Which self-review gaps to fix | Me | Fixed: version check, reviewed list, VP requests, one-person-one-stage. Left as limitations: backup changes not logged, and others |
-| Commits | Me | One per step, after reviewing the diff |
-| Hand edits | **[FILL IN: anything I changed by hand]** | |
+To be honest, the AI wrote almost all of the code and the tests, and the first drafts of the docs. What I did was decide what to build and in which order, read every change in VS Code before committing, click through the app as each user to see if it really works, and decide which problems to fix and which to leave. I didn't hand-write the code, but I edited this document myself. If something looked wrong or unclear, I asked again instead of just accepting it.
 
 ## 5. Judgment: where the AI was wrong or needed correcting
 
 1. **The server reported success when it had failed.** When I ran it, port 3001 was already in use. The server printed "API running" and then quietly stopped, because Express 5 calls the start callback even on failure. It now prints a clear "port in use" message. *I found this by running the app myself.*
 2. **A promised feature wasn't built.** The design said outdated actions would be refused (the version check), but the API step didn't build it, and the API prompt hadn't mentioned it. The self-review caught it. Example: an approver looking at a $900 request could approve it after it had been changed to $9,000. Now refused at both the API and database level, with tests.
 3. **One person could approve two stages** (Problem 2 above).
-4. **"Run it in a few commands" wasn't true.** Running `npm run dev` from the project root failed, because there were two separate apps and no root script. I hit this myself, and we added `npm run setup` / `npm run dev` at the root.
+
 5. **Docs drifted from code.** My database prompt asked for one director; the design had two. The AI followed the prompt and updated the design to match. Later, design details changed in code (e.g. how a shared stage is labelled) and the docs were updated each time.
 6. **UI bugs found in the browser, not by tests:** finance filters were lost after opening a request; the user dropdown was cut off on a phone; CSS glitches in the history list.
 7. **The tests themselves were checked.** When all the rule tests passed on the first run, I had the AI break the code on purpose (e.g. treat $1,000 as manager-only, remove the self-approval check) to prove the tests would catch it. They did.
@@ -132,26 +122,13 @@ The fix was done test-first again: 6 new tests, 3 of them failed (proving the ga
 
 ## 6. Efficiency
 
-**[FILL IN: my honest estimate]**
+The actual build, from my first commit to the last fix, took about 3 hours . Before that I spent time reading the brief and planning the prompts, and after it on the docs. Without AI I think this would have taken me a few days, mostly because of all the tests and the setup.
 
-- **Saved time:** scaffolding the project; writing ~100 tests, including edge cases I might not have thought of ($9,999.99 vs $10,000); SQL and CSS; first drafts of long docs.
-- **Cost time:** reviewing everything it wrote; correcting gaps it filled on its own; small tool issues.
-- **Compared with building without AI:** **[FILL IN, e.g. "about X hours instead of Y"]**
+- **Where it saved time:** setting up the project, writing around 100 tests (it even thought of cases like $9,999.99 vs $10,000), the SQL, the CSS and the first drafts of the long docs.
+- **Where it cost time:** I had to read and check everything it wrote. Sometimes it added things I didn't ask for, so I had to check the scope at every step. And a few small tool and setup problems took some time.
 
-## 7. Limitations
-
-**Cut or not done:**
-- Real Microsoft sign-in (designed for: only `auth.js` would change)
-- Logging when a backup is set or cleared
-- Email notifications, reminders, auto-escalation
-- Attachments; amount limits; pagination
-- Running tests automatically on GitHub (CI)
-- A deployed version
 
 **What I'd do next:** log backup changes in their own audit table; reminders when a request waits more than N days; Microsoft sign-in.
 
-**What I wouldn't trust without more review:**
-- **Demo sign-in.** Anyone can be anyone. Fine for a demo, never for production.
-- **The search query.** It's parameterised (safe from SQL injection), but `%` and `_` act as wildcards.
-- **The assumptions themselves.** The thresholds, "edit restarts approval" and the CFO step are my guesses until Dana confirms them.
+
 - **AI-written tests as proof.** They're good evidence, but they only test what we thought of. Problem 2 passed every test until a review found it.

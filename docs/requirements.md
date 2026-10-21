@@ -194,6 +194,7 @@ Priority: **Must** = needed for the demo · **Should** = included if time allows
 - Real Microsoft (Entra ID) sign-in. The design keeps this to a one-module change.
 - Email or Teams notifications and reminders.
 - Auto-escalation when a request waits more than N days.
+- An audit log of when a backup is set or cleared. (Every decision a backup makes *is* recorded, with "on behalf of".)
 - Attachments (quotes, invoices).
 - Who approves the CFO's own requests (B4: would need a CEO or board step).
 - Org-chart administration screens. Users and reporting lines are seed data.

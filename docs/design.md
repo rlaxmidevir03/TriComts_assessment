@@ -6,18 +6,20 @@ Goal: **the smallest design that meets every Must requirement and the kickoff co
 ## 1. Big picture
 
 ```
-React (Vite)  ──HTTP /api──►  Express  ──►  workflow.js (plain rules)  ──►  SQLite
+React (Vite)  ──HTTP /api──►  Express routes  ──►  workflow.js (plain rules)
  user switcher                 auth.js  (who is the user?)
-                               routes   (load data → ask workflow → save in one transaction)
+                                     └──────────►  store.js (all SQL)  ──►  SQLite
 ```
 
 | Piece | File(s) | Job |
 |---|---|---|
 | Identity | `server/src/auth.js` | The **only** code that decides who the current user is. |
 | Rules | `server/src/workflow.js` | Plain functions: build the approval route, check who may act, decide the next status. No Express or SQL, so it's easy to test. |
-| Database | `server/src/db.js` | Creates tables and triggers, runs queries. |
-| API | `server/src/routes.js` | Thin HTTP layer: validate input → call workflow → save + write history in one transaction. |
-| UI | `client/src/` | Screens. Hides buttons the user can't use, but **the server enforces every rule.** |
+| API | `server/src/routes.js` | Thin HTTP layer: load the request → check its version → ask workflow → save → reply. |
+| Data access | `server/src/store.js` | All SQL reads and writes. Saves each change **and** its history row in one transaction, and refuses a save based on an outdated version. |
+| Database setup | `server/src/db.js` | Opens SQLite, creates the tables and the triggers that make history append-only. |
+| Demo data | `server/src/seed.js` | Demo users and sample requests, created through the real workflow rules. |
+| UI | `client/src/` | Screens. `api.js` is the only file that calls the server. Hides buttons the user can't use, but **the server enforces every rule.** |
 
 ## 2. Data model (5 tables)
 
@@ -189,7 +191,7 @@ Errors return `{ "error": "message" }` with **400** invalid input · **401** no 
 | `GET /api/requests?view=mine` | signed in | My requests (US-9) |
 | `GET /api/requests?view=inbox` | approvers | Waiting on me or someone I cover (US-10) |
 | `GET /api/requests?view=reviewed` | approvers | Requests I approved, rejected or sent back, or my backup did for me (G1) |
-| `GET /api/requests?view=all&q=&status=&department=` | finance, vp_finance | Company-wide, searchable and filterable (US-12) |
+| `GET /api/requests?view=all&q=&status=&departmentId=` | finance, vp_finance | Company-wide, searchable and filterable (US-12) |
 | `GET /api/requests/:id` | requester, anyone in its route, finance, vp_finance | Details + route + full history |
 | `POST /api/requests` | not finance | Submit (US-1) |
 | `PUT /api/requests/:id` | requester | Edit or resubmit. Body includes `version` (US-7) |
